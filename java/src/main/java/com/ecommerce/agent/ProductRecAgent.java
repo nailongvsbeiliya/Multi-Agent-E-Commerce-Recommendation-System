@@ -3,51 +3,53 @@ package com.ecommerce.agent;
 import com.ecommerce.model.AgentResult;
 import com.ecommerce.model.Product;
 import com.ecommerce.model.UserProfile;
+import com.ecommerce.service.ProductCatalogService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
-/**
- * 商品推荐Agent — 多策略召回 + LLM重排 + 多样性控制
- */
 @Component
 public class ProductRecAgent extends BaseAgent {
 
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ProductCatalogService productCatalogService;
 
-    private static final List<Product> MOCK_PRODUCTS = List.of(
-            Product.builder().productId("P001").name("iPhone 16 Pro").category("手机").price(7999).brand("Apple").sellerId("S01").stock(500).tags(List.of("旗舰", "新品")).build(),
-            Product.builder().productId("P002").name("华为 Mate 70").category("手机").price(5999).brand("华为").sellerId("S02").stock(300).tags(List.of("旗舰", "国产")).build(),
-            Product.builder().productId("P003").name("AirPods Pro 3").category("耳机").price(1899).brand("Apple").sellerId("S01").stock(1000).tags(List.of("降噪", "无线")).build(),
-            Product.builder().productId("P004").name("Sony WH-1000XM6").category("耳机").price(2499).brand("Sony").sellerId("S03").stock(200).tags(List.of("头戴", "降噪")).build(),
-            Product.builder().productId("P005").name("iPad Air M3").category("平板").price(4799).brand("Apple").sellerId("S01").stock(400).tags(List.of("学习", "办公")).build(),
-            Product.builder().productId("P006").name("小米平板7 Pro").category("平板").price(2499).brand("小米").sellerId("S04").stock(600).tags(List.of("性价比", "娱乐")).build(),
-            Product.builder().productId("P007").name("Anker 140W充电器").category("配件").price(399).brand("Anker").sellerId("S05").stock(2000).tags(List.of("快充", "便携")).build(),
-            Product.builder().productId("P008").name("机械革命极光X").category("笔记本").price(6999).brand("机械革命").sellerId("S06").stock(150).tags(List.of("游戏", "高性能")).build(),
-            Product.builder().productId("P009").name("戴尔U2724D显示器").category("显示器").price(3299).brand("Dell").sellerId("S07").stock(80).tags(List.of("4K", "办公")).build(),
-            Product.builder().productId("P010").name("罗技MX Master 3S").category("配件").price(749).brand("罗技").sellerId("S08").stock(500).tags(List.of("无线", "办公")).build()
-    );
-
-    public ProductRecAgent(ChatClient.Builder chatClientBuilder) {
+    public ProductRecAgent(ChatClient.Builder chatClientBuilder, ProductCatalogService productCatalogService) {
         super("product_rec", 8.0, 2);
         this.chatClient = chatClientBuilder.build();
+        this.productCatalogService = productCatalogService;
     }
 
     @Override
     protected AgentResult execute(Map<String, Object> params) throws Exception {
         UserProfile profile = (UserProfile) params.get("userProfile");
         int numItems = (int) params.getOrDefault("numItems", 10);
+        String mode = String.valueOf(params.getOrDefault("mode", "full"));
+        String strategy = String.valueOf(params.getOrDefault("strategy", "llm_rerank"));
+        String userQuery = String.valueOf(params.getOrDefault("userQuery", "")).trim();
+        List<String> queryTokens = castStringList(params.get("queryTokens"));
+        List<Product> candidates = "rerank".equals(mode)
+                ? castProducts(params.get("candidates"))
+                : productCatalogService.recallProducts(profile, Math.max(1, numItems * 2), strategy);
+        candidates = applyQueryPreference(candidates, userQuery, queryTokens, numItems);
 
-        List<Product> candidates = recall(profile, numItems * 2);
-        List<String> rankedIds = rerank(profile, candidates, numItems);
-
+        RerankResult rerankResult = rerank(profile, candidates, numItems, strategy);
+        List<String> rankedIds = rerankResult.ids();
         Map<String, Product> idMap = candidates.stream()
-                .collect(Collectors.toMap(Product::getProductId, p -> p, (a, b) -> a));
+                .collect(Collectors.toMap(Product::getProductId, p -> p, (left, right) -> left));
+
         List<Product> finalProducts = rankedIds.stream()
                 .filter(idMap::containsKey)
                 .map(idMap::get)
@@ -56,60 +58,285 @@ public class ProductRecAgent extends BaseAgent {
 
         if (finalProducts.size() < numItems) {
             candidates.stream()
-                    .filter(p -> !rankedIds.contains(p.getProductId()))
+                    .filter(p -> finalProducts.stream().noneMatch(selected -> selected.getProductId().equals(p.getProductId())))
                     .limit(numItems - finalProducts.size())
                     .forEach(finalProducts::add);
         }
 
         Map<String, Object> data = new HashMap<>();
+        data.put("mode", mode);
         data.put("products", finalProducts);
-        data.put("recall_strategy", "collaborative_filter+vector+hot");
+        data.put("candidates", candidates);
+        data.put("query", userQuery);
+        data.put("query_tokens", queryTokens);
+        data.put("ranked_ids", rankedIds);
+        data.put("llm_used", rerankResult.llmUsed());
+        data.put("recall_strategy", "explore_diversity".equals(strategy)
+                ? "collaborative_filter+vector+hot+new_arrival"
+                : "collaborative_filter+vector+hot");
         data.put("candidate_count", candidates.size());
 
         return AgentResult.builder()
                 .agentName(name)
                 .success(true)
                 .data(data)
-                .confidence(0.8)
+                .confidence(0.82)
                 .build();
     }
 
-    private List<Product> recall(UserProfile profile, int limit) {
-        List<Product> candidates = new ArrayList<>(MOCK_PRODUCTS);
-        if (profile != null && profile.getPreferredCategories() != null) {
-            Set<String> preferred = new HashSet<>(profile.getPreferredCategories());
-            candidates.sort((a, b) -> Boolean.compare(
-                    preferred.contains(b.getCategory()),
-                    preferred.contains(a.getCategory())
-            ));
+    private List<Product> castProducts(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .filter(Product.class::isInstance)
+                    .map(Product.class::cast)
+                    .collect(Collectors.toList());
         }
-        return candidates.subList(0, Math.min(limit, candidates.size()));
+        return List.of();
     }
 
-    private List<String> rerank(UserProfile profile, List<Product> candidates, int numItems) {
-        if (profile == null) {
-            return candidates.stream().map(Product::getProductId).limit(numItems).collect(Collectors.toList());
+    private List<String> castStringList(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+        }
+        return List.of();
+    }
+
+    private List<Product> applyQueryPreference(List<Product> candidates,
+                                               String userQuery,
+                                               List<String> queryTokens,
+                                               int numItems) {
+        List<String> tokens = buildQueryTokens(userQuery, queryTokens);
+        if (tokens.isEmpty()) {
+            return candidates;
+        }
+
+        Map<String, Product> byId = new HashMap<>();
+        for (Product candidate : candidates) {
+            byId.put(candidate.getProductId(), candidate);
+        }
+        for (Product product : productCatalogService.getAllProducts()) {
+            byId.putIfAbsent(product.getProductId(), product);
+        }
+
+        Map<String, Integer> originalRank = new HashMap<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            originalRank.put(candidates.get(i).getProductId(), i);
+        }
+
+        List<Product> ranked = new ArrayList<>(byId.values());
+        ranked.sort(Comparator
+                .comparingInt((Product product) -> queryMatchScore(product, tokens)).reversed()
+                .thenComparingInt(product -> originalRank.getOrDefault(product.getProductId(), Integer.MAX_VALUE))
+                .thenComparing(Product::getProductId));
+
+        int maxScore = ranked.stream()
+                .mapToInt(product -> queryMatchScore(product, tokens))
+                .max()
+                .orElse(0);
+        if (maxScore <= 0) {
+            return candidates;
+        }
+
+        int targetSize = Math.max(candidates.size(), Math.max(numItems * 2, numItems));
+        return ranked.stream().limit(targetSize).collect(Collectors.toList());
+    }
+
+    private List<String> buildQueryTokens(String userQuery, List<String> queryTokens) {
+        Set<String> tokens = new LinkedHashSet<>();
+        if (queryTokens != null) {
+            for (String token : queryTokens) {
+                if (token != null && token.length() > 1) {
+                    tokens.add(token.toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+
+        String normalized = userQuery == null ? "" : userQuery.toLowerCase(Locale.ROOT);
+        for (String part : normalized.split("[\\s,.;!?]+")) {
+            String token = part.trim();
+            if (token.length() > 1) {
+                tokens.add(token);
+            }
+        }
+
+        if (containsAny(normalized, "\u8033\u673a", "\u964d\u566a", "\u84dd\u7259")) {
+            tokens.add("airpods");
+            tokens.add("sony");
+            tokens.add("headphone");
+            tokens.add("pods");
+        }
+        if (containsAny(normalized, "\u624b\u673a", "iphone", "\u82f9\u679c", "\u534e\u4e3a", "mate")) {
+            tokens.add("iphone");
+            tokens.add("apple");
+            tokens.add("huawei");
+            tokens.add("mate");
+        }
+        if (containsAny(normalized, "\u5e73\u677f", "ipad", "tablet")) {
+            tokens.add("ipad");
+            tokens.add("tablet");
+        }
+        if (containsAny(normalized, "\u5145\u7535", "\u5feb\u5145", "\u5145\u7535\u5668")) {
+            tokens.add("anker");
+            tokens.add("charger");
+            tokens.add("140w");
+        }
+        if (containsAny(normalized, "\u9f20\u6807")) {
+            tokens.add("logitech");
+            tokens.add("mouse");
+            tokens.add("mx");
+        }
+        if (containsAny(normalized, "\u663e\u793a\u5668")) {
+            tokens.add("dell");
+            tokens.add("u2724");
+            tokens.add("monitor");
+        }
+        if (containsAny(normalized, "\u7b14\u8bb0\u672c", "\u6e38\u620f\u672c", "laptop")) {
+            tokens.add("laptop");
+            tokens.add("notebook");
+        }
+        return new ArrayList<>(tokens);
+    }
+
+    private List<String> buildQueryTokensBroken(String userQuery, List<String> queryTokens) {
+        /*
+        Set<String> tokens = new LinkedHashSet<>();
+        if (queryTokens != null) {
+            for (String token : queryTokens) {
+                if (token != null && token.length() > 1) {
+                    tokens.add(token.toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+
+        String normalized = userQuery == null ? "" : userQuery.toLowerCase(Locale.ROOT);
+        for (String part : normalized.split("[\\s,，。!！?？;；]+")) {
+            String token = part.trim();
+            if (token.length() > 1) {
+                tokens.add(token);
+            }
+        }
+
+        if (containsAny(normalized, "耳机", "降噪", "蓝牙")) {
+            tokens.add("airpods");
+            tokens.add("sony");
+            tokens.add("headphone");
+            tokens.add("pods");
+        }
+        if (containsAny(normalized, "手机", "iphone", "苹果", "华为", "mate")) {
+            tokens.add("iphone");
+            tokens.add("apple");
+            tokens.add("huawei");
+            tokens.add("mate");
+        }
+        if (containsAny(normalized, "平板", "ipad", "tablet")) {
+            tokens.add("ipad");
+            tokens.add("tablet");
+        }
+        if (containsAny(normalized, "充电", "快充", "充电器")) {
+            tokens.add("anker");
+            tokens.add("charger");
+            tokens.add("140w");
+        }
+        if (containsAny(normalized, "鼠标")) {
+            tokens.add("logitech");
+            tokens.add("mouse");
+            tokens.add("mx");
+        }
+        if (containsAny(normalized, "显示器")) {
+            tokens.add("dell");
+            tokens.add("u2724");
+            tokens.add("monitor");
+        }
+        if (containsAny(normalized, "笔记本", "游戏本", "laptop")) {
+            tokens.add("laptop");
+            tokens.add("notebook");
+        }
+        */
+        return List.of();
+    }
+
+    private int queryMatchScore(Product product, List<String> tokens) {
+        String text = searchableText(product);
+        int score = 0;
+        for (String token : tokens) {
+            if (text.contains(token)) {
+                score += 1;
+            }
+        }
+        return score;
+    }
+
+    private String searchableText(Product product) {
+        String tags = product.getTags() == null ? "" : String.join(" ", product.getTags());
+        return (safeLower(product.getName())
+                + " " + safeLower(product.getBrand())
+                + " " + safeLower(product.getCategory())
+                + " " + safeLower(product.getDescription())
+                + " " + safeLower(tags))
+                .trim();
+    }
+
+    private String safeLower(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private RerankResult rerank(UserProfile profile, List<Product> candidates, int numItems, String strategy) {
+        if (candidates.isEmpty()) {
+            return new RerankResult(List.of(), false);
+        }
+        if (profile == null || profile.getPriceRange() == null || profile.getPriceRange().length < 2) {
+            List<String> ids = candidates.stream().map(Product::getProductId).limit(numItems).collect(Collectors.toList());
+            return new RerankResult(ids, false);
         }
         try {
             String prompt = String.format(
-                    "根据用户偏好类目%s和价格范围%.0f-%.0f,从以下商品中选出最优%d个,输出ID数组:\n%s\n只输出JSON数组。",
+                    "请根据用户偏好类目%s、价格范围%.0f-%.0f、实验策略%s，对候选商品进行重排，并返回最优的%d个商品ID的JSON数组。\n候选商品:\n%s",
                     profile.getPreferredCategories(),
-                    profile.getPriceRange()[0], profile.getPriceRange()[1],
+                    profile.getPriceRange()[0],
+                    profile.getPriceRange()[1],
+                    strategy,
                     numItems,
                     candidates.stream()
-                            .map(p -> p.getProductId() + ":" + p.getName() + "(" + p.getCategory() + ",¥" + p.getPrice() + ")")
+                            .map(p -> p.getProductId() + ":" + p.getName() + "(" + p.getCategory() + ",￥" + p.getPrice() + "," + p.getTags() + ")")
                             .collect(Collectors.joining("\n"))
             );
             String response = chatClient.prompt().user(prompt).call().content();
-            String cleaned = response.trim();
-            if (cleaned.startsWith("```")) {
-                cleaned = cleaned.substring(cleaned.indexOf('\n') + 1);
-                cleaned = cleaned.substring(0, cleaned.lastIndexOf("```"));
-            }
-            return objectMapper.readValue(cleaned, new TypeReference<>() {});
+            String cleaned = stripCodeFence(response);
+            List<String> ids = objectMapper.readValue(cleaned, new TypeReference<>() {});
+            return new RerankResult(ids, true);
         } catch (Exception e) {
-            log.warn("LLM rerank failed, using default order: {}", e.getMessage());
-            return candidates.stream().map(Product::getProductId).limit(numItems).collect(Collectors.toList());
+            log.warn("LLM rerank failed, using catalog order: {}", e.getMessage());
+            List<String> ids = candidates.stream().map(Product::getProductId).limit(numItems).collect(Collectors.toList());
+            return new RerankResult(ids, false);
         }
+    }
+
+    private String stripCodeFence(String raw) {
+        String cleaned = raw == null ? "" : raw.trim();
+        if (cleaned.startsWith("```")) {
+            cleaned = cleaned.substring(cleaned.indexOf('\n') + 1);
+            cleaned = cleaned.substring(0, cleaned.lastIndexOf("```"));
+        }
+        return cleaned;
+    }
+
+    private record RerankResult(List<String> ids, boolean llmUsed) {
     }
 }

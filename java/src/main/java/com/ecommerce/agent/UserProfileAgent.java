@@ -2,103 +2,75 @@ package com.ecommerce.agent;
 
 import com.ecommerce.model.AgentResult;
 import com.ecommerce.model.UserProfile;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ecommerce.service.UserFeatureStoreService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-/**
- * 用户画像Agent — 实时特征提取 + RFM模型 + 用户分群
- */
 @Component
 public class UserProfileAgent extends BaseAgent {
 
-    private final ChatClient chatClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
     private static final String SYSTEM_PROMPT = """
-            你是一个电商用户画像分析专家。根据用户的行为数据,分析用户特征并生成画像。
-            输出JSON格式:
-            {"segments":["active"],"preferred_categories":["手机"],"price_range":[0,10000],
-             "rfm_score":{"recency":0.8,"frequency":0.5,"monetary":0.6},
-             "real_time_tags":{"活跃时段":"晚间"}}
-            只输出JSON。""";
+            你是电商用户画像分析专家。
+            请根据实时行为特征总结用户分群、偏好类目、价格带和关键标签。
+            输出一段简洁中文摘要，不需要JSON。
+            """;
 
-    public UserProfileAgent(ChatClient.Builder chatClientBuilder) {
+    private final ChatClient chatClient;
+    private final UserFeatureStoreService featureStoreService;
+
+    public UserProfileAgent(ChatClient.Builder chatClientBuilder, UserFeatureStoreService featureStoreService) {
         super("user_profile", 5.0, 2);
         this.chatClient = chatClientBuilder.build();
+        this.featureStoreService = featureStoreService;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     protected AgentResult execute(Map<String, Object> params) throws Exception {
         String userId = (String) params.get("userId");
-        Map<String, Object> behavior = collectBehavior(userId, params);
-
-        String response = chatClient.prompt()
-                .system(SYSTEM_PROMPT)
-                .user("用户ID: " + userId + "\n行为数据: " + objectMapper.writeValueAsString(behavior))
-                .call()
-                .content();
-
-        UserProfile profile = parseProfile(userId, response);
+        Map<String, Object> behavior = featureStoreService.getRealtimeFeatures(userId, (Map<String, Object>) params.get("context"));
+        Map<String, Double> rfm = featureStoreService.computeRfm(behavior);
+        List<String> segments = featureStoreService.segment(behavior, rfm);
+        UserProfile profile = featureStoreService.buildProfile(userId, behavior, rfm, segments);
+        SummaryResult summaryResult = summarizeProfile(userId, behavior, profile);
 
         Map<String, Object> data = new HashMap<>();
-        data.put("raw_analysis", response);
+        data.put("behavior_features", behavior);
+        data.put("raw_analysis", summaryResult.content());
+        data.put("llm_used", summaryResult.llmUsed());
         data.put("profile", profile);
 
         return AgentResult.builder()
                 .agentName(name)
                 .success(true)
                 .data(data)
-                .confidence(0.85)
+                .confidence(0.88)
                 .build();
     }
 
-    private Map<String, Object> collectBehavior(String userId, Map<String, Object> params) {
-        Map<String, Object> behavior = new HashMap<>();
-        behavior.put("user_id", userId);
-        behavior.put("recent_views", List.of("手机", "耳机", "平板"));
-        behavior.put("recent_purchases", List.of("充电器"));
-        behavior.put("view_count_7d", 25);
-        behavior.put("purchase_count_30d", 3);
-        behavior.put("avg_order_amount", 299.0);
-        return behavior;
+    private SummaryResult summarizeProfile(String userId, Map<String, Object> behavior, UserProfile profile) {
+        try {
+            String content = chatClient.prompt()
+                    .system(SYSTEM_PROMPT)
+                    .user("用户ID: " + userId
+                            + "\n行为特征: " + behavior
+                            + "\n结构化画像: segments=" + profile.getSegments()
+                            + ", preferredCategories=" + profile.getPreferredCategories()
+                            + ", rfm=" + profile.getRfmScore())
+                    .call()
+                    .content();
+            return new SummaryResult(content, true);
+        } catch (Exception e) {
+            log.warn("Failed to summarize profile for {}: {}", userId, e.getMessage());
+            String fallback = "segments=" + profile.getSegments() + ", preferredCategories=" + profile.getPreferredCategories();
+            return new SummaryResult(fallback, false);
+        }
     }
 
-    @SuppressWarnings("unchecked")
-    private UserProfile parseProfile(String userId, String raw) {
-        try {
-            String cleaned = raw.trim();
-            if (cleaned.startsWith("```")) {
-                cleaned = cleaned.substring(cleaned.indexOf('\n') + 1);
-                cleaned = cleaned.substring(0, cleaned.lastIndexOf("```"));
-            }
-            Map<String, Object> data = objectMapper.readValue(cleaned, Map.class);
-
-            List<String> segments = (List<String>) data.getOrDefault("segments", List.of("active"));
-            List<String> categories = (List<String>) data.getOrDefault("preferred_categories", List.of());
-            List<?> priceRaw = (List<?>) data.getOrDefault("price_range", List.of(0, 10000));
-            Map<String, Double> rfm = (Map<String, Double>) data.getOrDefault("rfm_score", Map.of());
-            Map<String, Object> tags = (Map<String, Object>) data.getOrDefault("real_time_tags", Map.of());
-
-            return UserProfile.builder()
-                    .userId(userId)
-                    .segments(segments)
-                    .preferredCategories(categories)
-                    .priceRange(new double[]{
-                            ((Number) priceRaw.get(0)).doubleValue(),
-                            priceRaw.size() > 1 ? ((Number) priceRaw.get(1)).doubleValue() : 10000
-                    })
-                    .rfmScore(rfm)
-                    .realTimeTags(tags)
-                    .build();
-        } catch (Exception e) {
-            log.warn("Failed to parse profile for {}: {}", userId, e.getMessage());
-            return UserProfile.builder()
-                    .userId(userId)
-                    .segments(List.of("active"))
-                    .build();
-        }
+    private record SummaryResult(String content, boolean llmUsed) {
     }
 }

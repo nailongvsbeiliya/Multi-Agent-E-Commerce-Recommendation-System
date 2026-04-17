@@ -19,6 +19,9 @@ public class RecommendationResponse {
     private List<Product> products;
     private List<Map<String, String>> marketingCopies;
     private String experimentGroup;
+    private Map<String, Object> experimentInfo;
+    private Map<String, Integer> purchaseLimits;
+    private List<Map<String, Object>> lowStockAlerts;
     private Map<String, AgentResult> agentResults;
     private double totalLatencyMs;
     @Builder.Default
