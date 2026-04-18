@@ -159,7 +159,7 @@ mvn --% spring-boot:run -Dmaven.compiler.release=17 -Dmaven.compiler.source=17 -
 ## IDE 一键运行
 
 `Main class`: `com.ecommerce.MultiAgentApplication`  
-`Active profiles`: `ide`（已默认连接 PostgreSQL）
+`Active profiles`: （已默认连接 PostgreSQL）
 
 如果“点运行后立即退出”，优先检查：
 
@@ -177,7 +177,7 @@ mvn --% spring-boot:run -Dmaven.compiler.release=17 -Dmaven.compiler.source=17 -
 
 ## 接入千问（Qwen）
 
-项目使用 OpenAI 兼容协议接入。建议通过环境变量覆盖配置，不要把 Key 提交到仓库：
+项目使用 OpenAI 兼容协议接入。建议通过环境变量覆盖配置：
 
 ```powershell
 $env:ECOM_LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -199,15 +199,3 @@ cd D:\xiangmu\multi-agent-ecommerce-system\java
 mvn -q -Dtest=RecommendationControllerIntegrationTest test
 ```
 
-## 开源说明
-
-建议在公开仓库前完成：
-
-1. 清理 `application*.yml` 中硬编码密钥
-2. 补充 `LICENSE`（建议 MIT）
-3. 补充 `CONTRIBUTING.md` 与 Issue/PR 模板
-4. 发布一份可复现的 Demo 视频/GIF（聊天推荐 + 会话记忆 + 猜你想买）
-
----
-
-如果你准备把它作为简历项目，这个版本已经具备“可运行、多 Agent 编排、可演示、可扩展”的核心价值。

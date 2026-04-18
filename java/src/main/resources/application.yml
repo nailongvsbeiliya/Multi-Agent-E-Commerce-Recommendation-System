@@ -3,7 +3,7 @@ spring:
     name: multi-agent-ecommerce
   ai:
     openai:
-      api-key: sk-4028fefa161a418c8b86aa871d664873
+      api-key: 
       base-url: ${ECOM_LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
       chat:
         options:
