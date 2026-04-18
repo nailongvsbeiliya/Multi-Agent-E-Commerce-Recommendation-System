@@ -1,12 +1,14 @@
 package com.ecommerce.config;
 
+import com.ecommerce.model.GuessYouLikeResponse;
 import com.ecommerce.model.RecommendationRequest;
 import com.ecommerce.model.RecommendationResponse;
 import com.ecommerce.model.TextRecommendationRequest;
 import com.ecommerce.orchestrator.SupervisorOrchestrator;
 import com.ecommerce.service.ABTestService;
+import com.ecommerce.service.ChatRecommendationService;
+import com.ecommerce.service.GuessYouLikeService;
 import com.ecommerce.service.LlmSmokeTestService;
-import com.ecommerce.service.NaturalLanguageRequestService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,16 +25,19 @@ public class RecommendationController {
     private final SupervisorOrchestrator orchestrator;
     private final ABTestService abTestService;
     private final LlmSmokeTestService llmSmokeTestService;
-    private final NaturalLanguageRequestService naturalLanguageRequestService;
+    private final ChatRecommendationService chatRecommendationService;
+    private final GuessYouLikeService guessYouLikeService;
 
     public RecommendationController(SupervisorOrchestrator orchestrator,
                                     ABTestService abTestService,
                                     LlmSmokeTestService llmSmokeTestService,
-                                    NaturalLanguageRequestService naturalLanguageRequestService) {
+                                    ChatRecommendationService chatRecommendationService,
+                                    GuessYouLikeService guessYouLikeService) {
         this.orchestrator = orchestrator;
         this.abTestService = abTestService;
         this.llmSmokeTestService = llmSmokeTestService;
-        this.naturalLanguageRequestService = naturalLanguageRequestService;
+        this.chatRecommendationService = chatRecommendationService;
+        this.guessYouLikeService = guessYouLikeService;
     }
 
     @PostMapping("/recommend")
@@ -42,8 +47,14 @@ public class RecommendationController {
 
     @PostMapping("/recommend/chat")
     public RecommendationResponse recommendByText(@RequestBody TextRecommendationRequest request) {
-        RecommendationRequest normalized = naturalLanguageRequestService.normalize(request);
-        return orchestrator.recommend(normalized);
+        return chatRecommendationService.recommendByText(request);
+    }
+
+    @GetMapping("/recommend/guess-you-like")
+    public GuessYouLikeResponse guessYouLike(@RequestParam(value = "userId", required = false) String userId,
+                                             @RequestParam(value = "sessionId", required = false) String sessionId,
+                                             @RequestParam(value = "numItems", required = false) Integer numItems) {
+        return guessYouLikeService.guessYouLike(userId, sessionId, numItems);
     }
 
     @GetMapping("/health")

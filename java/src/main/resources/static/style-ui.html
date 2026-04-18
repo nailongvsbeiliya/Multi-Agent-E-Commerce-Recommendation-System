@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Style UI Demo</title>
+    <meta http-equiv="refresh" content="0; url=/style-ui-pro.html">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+    <div class="logo">Style Rec UI</div>
+    <div style="font-size: 0.875rem; color: var(--text-secondary);">
+        User ID: <span id="currentUserId">u001</span>
+    </div>
+</header>
+
+<main>
+    <section class="hero-section">
+        <h1>你想买什么</h1>
+        <p>告诉我们的多智能体助手您的需求，或者直接浏览我们为您准备的精选商品。</p>
+
+        <div class="search-box">
+            <input id="queryInput" type="text" placeholder="例如：推荐 3000 左右的手机">
+            <button id="searchButton" type="button">智能推荐</button>
+        </div>
+    </section>
+
+    <section class="container">
+        <h2 class="section-title" id="resultTitle">猜你喜欢</h2>
+        <div id="loading" class="loading-indicator">正在加载推荐...</div>
+        <div class="product-grid" id="productGrid"></div>
+        <div style="text-align:center; margin-top: 1.25rem;">
+            <button id="moreButton" type="button" style="display:none; background:#000; color:#fff; border:none; padding:0.6rem 1.2rem; border-radius:999px; cursor:pointer;">
+                查看更多
+            </button>
+        </div>
+    </section>
+</main>
+
+<script>
+    let sessionId = null;
+    let currentProducts = [];
+    let currentCopyMap = {};
+    let visibleCount = 3;
+    const MAX_VISIBLE = 6;
+
+    const userId = "u_" + Math.random().toString(36).slice(2, 8);
+    document.getElementById("currentUserId").textContent = userId;
+
+    const queryInput = document.getElementById("queryInput");
+    const searchButton = document.getElementById("searchButton");
+    const moreButton = document.getElementById("moreButton");
+    const loading = document.getElementById("loading");
+    const resultTitle = document.getElementById("resultTitle");
+    const productGrid = document.getElementById("productGrid");
+
+    function showLoading(flag) {
+        loading.style.display = flag ? "block" : "none";
+        productGrid.style.opacity = flag ? "0.4" : "1";
+    }
+
+    function renderCards(products, copyMap, resetVisible = false) {
+        currentProducts = Array.isArray(products) ? products : [];
+        currentCopyMap = copyMap || {};
+        if (resetVisible) {
+            visibleCount = 3;
+        }
+
+        productGrid.innerHTML = "";
+        if (!currentProducts.length) {
+            productGrid.innerHTML = "<p style='grid-column:1/-1;text-align:center;color:#6b7280;'>暂无匹配商品</p>";
+            moreButton.style.display = "none";
+            return;
+        }
+
+        const displayProducts = currentProducts.slice(0, Math.min(visibleCount, MAX_VISIBLE));
+        displayProducts.forEach((p) => {
+            const copy = currentCopyMap[p.productId] || "精选好物，值得一试。";
+            const brand = p.brand || "精选品牌";
+            const title = p.name || p.productId || "推荐商品";
+            const price = typeof p.price === "number" ? p.price.toFixed(0) : "-";
+
+            const card = document.createElement("div");
+            card.className = "product-card";
+            card.innerHTML = `
+                <div class="product-image-placeholder">[商品图片]</div>
+                <div class="product-info">
+                    <div class="product-brand">${brand}</div>
+                    <div class="product-title">${title}</div>
+                    <div class="product-price">CNY ${price}</div>
+                    <div class="product-copy">${copy}</div>
+                </div>
+            `;
+            productGrid.appendChild(card);
+        });
+
+        const canExpand = currentProducts.length > 3 && visibleCount < MAX_VISIBLE;
+        moreButton.style.display = canExpand ? "inline-block" : "none";
+    }
+
+    async function loadGuessYouLike() {
+        resultTitle.textContent = "猜你喜欢";
+        showLoading(true);
+        try {
+            const res = await fetch(`/api/v1/recommend/guess-you-like?userId=${encodeURIComponent(userId)}&numItems=8`);
+            if (!res.ok) throw new Error("load guess-you-like failed");
+            const data = await res.json();
+            renderCards(data.items || [], null, true);
+        } catch (e) {
+            productGrid.innerHTML = "<p style='grid-column:1/-1;text-align:center;color:#b91c1c;'>加载失败，请检查服务是否启动</p>";
+            moreButton.style.display = "none";
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function searchRecommend() {
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        resultTitle.textContent = "推荐结果";
+        showLoading(true);
+        try {
+            const payload = {
+                userId,
+                query,
+                numItems: 8
+            };
+            if (sessionId) payload.sessionId = sessionId;
+
+            const res = await fetch("/api/v1/recommend/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error("recommend request failed");
+
+            const data = await res.json();
+            if (data.sessionId) sessionId = data.sessionId;
+
+            const copyMap = {};
+            (data.marketingCopies || []).forEach((c) => {
+                if (c && c.product_id) copyMap[c.product_id] = c.copy || "";
+            });
+            renderCards(data.products || [], copyMap, true);
+        } catch (e) {
+            productGrid.innerHTML = "<p style='grid-column:1/-1;text-align:center;color:#b91c1c;'>请求失败，请稍后再试</p>";
+            moreButton.style.display = "none";
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    moreButton.addEventListener("click", () => {
+        visibleCount = MAX_VISIBLE;
+        renderCards(currentProducts, currentCopyMap, false);
+    });
+
+    searchButton.addEventListener("click", searchRecommend);
+    queryInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") searchRecommend();
+    });
+
+    loadGuessYouLike();
+</script>
+</body>
+</html>

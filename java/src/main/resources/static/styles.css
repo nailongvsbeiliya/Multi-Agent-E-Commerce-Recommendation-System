@@ -1,0 +1,290 @@
+:root {
+    --bg-color: #ffffff;
+    --surface-color: #ffffff;
+    --text-primary: #1a1a1a;
+    --text-secondary: #737373;
+    --border-color: #e5e5e5;
+    --accent-color: #000000;
+    --accent-hover: #333333;
+    --shadow-input: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    --radius-lg: 24px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    /* 让整个页面变成 Flex 容器，方便上下排布 */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* 顶部导航栏 - 保持清爽 */
+header {
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: transparent;
+}
+
+.logo {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* 主体内容区 */
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* 核心修改：让主体内容在垂直方向上稍微偏上居中 */
+    justify-content: flex-start;
+    padding-top: 10vh;
+    width: 100%;
+}
+
+/* 搜索/对话区域 - 居中展示 */
+.hero-section {
+    width: 100%;
+    max-width: 768px; /* 限制最大宽度，显得精致 */
+    padding: 0 1.5rem;
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.hero-section h1 {
+    font-size: 2.25rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.hero-section p {
+    color: var(--text-secondary);
+    margin-bottom: 2.5rem;
+    font-size: 1rem;
+}
+
+/* 搜索框 - 调整为修长的胶囊形状 */
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--surface-color);
+    padding: 0.5rem 0.5rem 0.5rem 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-input);
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.search-box:focus-within {
+    border-color: #d1d5db;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+}
+
+.search-box input {
+    flex: 1;
+    border: none;
+    padding: 0.75rem 0;
+    font-size: 1rem;
+    outline: none;
+    background: transparent;
+}
+
+.search-box button {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 18px; /* 配合胶囊形状 */
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-box button:hover {
+    background-color: var(--accent-hover);
+}
+
+/* 商品展示区域 - 紧凑型结果展示 */
+.container {
+    width: 100%;
+    max-width: 900px; /* 比搜索框稍微宽一点 */
+    padding: 0 1.5rem 4rem;
+}
+
+.section-title {
+    font-size: 1.125rem;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center; /* 标题居中 */
+}
+
+/* 商品卡片网格布局调整为更小巧的卡片 */
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.5rem;
+}
+
+/* 极简商品卡片 */
+.product-card {
+    background-color: var(--surface-color);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    transition: transform 0.15s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+.product-card:hover {
+    transform: translateY(-2px);
+    border-color: #d1d5db;
+}
+
+.product-image-placeholder {
+    height: 160px;
+    background-color: #f9fafb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.product-info {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.product-brand {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.product-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 0.5rem;
+}
+
+.product-price {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.product-copy {
+    background-color: #f3f4f6;
+    padding: 0.6rem;
+    font-size: 0.8rem;
+    color: #4b5563;
+    margin-top: auto;
+    border-radius: 6px;
+    line-height: 1.4;
+}
+
+/* 状态展示 */
+.loading-indicator {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+    display: none;
+    font-size: 0.9rem;
+}
+
+.top-meta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.more-wrap {
+    margin-top: 1.25rem;
+}
+
+.result-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.result-count {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.more-btn {
+    display: none;
+    border: none;
+    background: var(--accent-color);
+    color: #fff;
+    padding: 0.6rem 1.2rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.more-btn:hover {
+    background: var(--accent-hover);
+}
+
+.more-btn[disabled] {
+    background: #d1d5db;
+    color: #6b7280;
+    cursor: not-allowed;
+}
+
+.feedback-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.feedback-message.error {
+    color: #b91c1c;
+}
+
+.reason-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.reason-tag {
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 0.28rem 0.5rem;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.reason-tag.accent {
+    background: #111827;
+    color: #fff;
+}

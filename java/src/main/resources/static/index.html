@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 智能推荐系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+    <div class="logo">Nexus RecSys</div>
+    <div style="font-size: 0.875rem; color: var(--text-secondary);">User ID: <span id="currentUserId">anonymous</span></div>
+</header>
+
+<main>
+    <section class="hero-section">
+        <h1>今天想找点什么？</h1>
+        <p>告诉我们的多智能体助手您的需求，或者直接浏览我们为您准备的精选商品。</p>
+
+        <div class="search-box">
+            <input type="text" id="queryInput" placeholder="例如：想买个预算3000左右，适合打游戏的手机..." onkeypress="handleKeyPress(event)">
+            <button onclick="fetchRecommendations()">智能推荐</button>
+        </div>
+    </section>
+
+    <section class="container">
+        <h2 class="section-title" id="resultTitle">猜你喜欢</h2>
+        <div id="loading" class="loading-indicator">
+            多智能体正在分析您的需求，请稍候...
+        </div>
+        <div class="product-grid" id="productGrid">
+        </div>
+    </section>
+</main>
+
+<script>
+    const userId = "u_" + Math.random().toString(36).substring(2, 9);
+    document.getElementById('currentUserId').innerText = userId;
+
+    // 页面加载时自动获取“猜你喜欢”
+    window.onload = () => fetchGuessYouLike();
+
+    function handleKeyPress(e) {
+        if (e.key === 'Enter') {
+            fetchRecommendations();
+        }
+    }
+
+    async function fetchGuessYouLike() {
+        showLoading(true);
+        try {
+            const res = await fetch(`/api/v1/recommend/guess-you-like?userId=${userId}&numItems=8`);
+            const data = await res.json();
+            // 适配后端 GuessYouLikeResponse 数据结构
+            const products = data.items.map(item => item.product);
+            renderProducts(products, null, "猜你喜欢");
+        } catch (error) {
+            console.error("获取猜你喜欢失败:", error);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function fetchRecommendations() {
+        const query = document.getElementById('queryInput').value.trim();
+        if (!query) return;
+
+        showLoading(true);
+        try {
+            const requestBody = {
+                userId: userId,
+                userQuery: query,
+                numItems: 8,
+                scene: "chat_search"
+            };
+
+            const res = await fetch('/api/v1/recommend/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await res.json();
+            renderProducts(data.products, data.marketingCopies, "为您找到以下商品");
+        } catch (error) {
+            console.error("推荐请求失败:", error);
+            document.getElementById('resultTitle').innerText = "推荐服务暂时不可用，请稍后再试";
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function renderProducts(products, marketingCopies, title) {
+        document.getElementById('resultTitle').innerText = title;
+        const grid = document.getElementById('productGrid');
+        grid.innerHTML = '';
+
+        if (!products || products.length === 0) {
+            grid.innerHTML = '<p style="color: #6b7280; grid-column: 1/-1; text-align: center;">没有找到符合条件的商品。</p>';
+            return;
+        }
+
+        // 建立文案映射字典
+        const copyMap = {};
+        if (marketingCopies && marketingCopies.length > 0) {
+            marketingCopies.forEach(mc => {
+                copyMap[mc.product_id] = mc.copy;
+            });
+        }
+
+        products.forEach(product => {
+            const copyText = copyMap[product.productId] || "精心挑选，值得一试。";
+            const tagsHtml = product.tags ? product.tags.map(t => `#${t}`).join(' ') : '';
+
+            const card = document.createElement('div');
+            card.className = 'product-card';
+            card.innerHTML = `
+                    <div class="product-image-placeholder">
+                        [商品主图]
+                    </div>
+                    <div class="product-info">
+                        <div class="product-brand">${product.brand || '优选品牌'} ${tagsHtml}</div>
+                        <div class="product-title">${product.name}</div>
+                        <div class="product-price">¥${product.price.toFixed(2)}</div>
+                        <div class="product-copy">💬 ${copyText}</div>
+                    </div>
+                `;
+            grid.appendChild(card);
+        });
+    }
+
+    function showLoading(isLoading) {
+        document.getElementById('loading').style.display = isLoading ? 'block' : 'none';
+        document.getElementById('productGrid').style.opacity = isLoading ? '0.3' : '1';
+    }
+</script>
+</body>
+</html>

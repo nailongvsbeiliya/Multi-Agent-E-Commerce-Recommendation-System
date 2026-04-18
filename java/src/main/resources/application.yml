@@ -3,12 +3,12 @@ spring:
     name: multi-agent-ecommerce
   ai:
     openai:
-      api-key: ${ECOM_LLM_API_KEY:your_api_key_here}
-      base-url: ${ECOM_LLM_BASE_URL:https://api.minimax.chat/v1}
+      api-key: sk-4028fefa161a418c8b86aa871d664873
+      base-url: ${ECOM_LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
       chat:
         options:
-          model: ${ECOM_LLM_MODEL:MiniMax-M1}
-          temperature: 0.7
+          model: ${ECOM_LLM_MODEL:qwen-plus}
+          temperature: ${ECOM_LLM_TEMPERATURE:0.3}
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}
     username: ${DB_USER:postgres}
@@ -21,3 +21,28 @@ spring:
 
 server:
   port: 8080
+
+recommendation:
+  nlp:
+    llm-first: true
+    fallback-enabled: true
+    default-scene: homepage
+    default-num-items: 5
+    max-num-items: 20
+    scene-campaign-keywords: [ "活动", "优惠", "折扣", "促销" ]
+    scene-detail-keywords: [ "参数", "对比", "详情", "评测" ]
+    stop-words: [ "我要", "想要", "推荐", "给我", "看看", "一个", "一些", "一下", "的", "了" ]
+    synonym-dictionary:
+      "耳机": [ "headphone", "earbuds", "audio" ]
+      "降噪": [ "noise-cancelling", "headphone", "earbuds" ]
+      "手机": [ "phone", "smartphone", "mobile" ]
+      "苹果": [ "apple", "iphone", "airpods", "ipad" ]
+      "华为": [ "huawei", "mate" ]
+      "平板": [ "tablet", "ipad" ]
+      "充电器": [ "charger", "power-adapter", "fast-charge" ]
+      "显示器": [ "monitor", "display", "screen" ]
+      "鼠标": [ "mouse", "pointer", "wireless-mouse" ]
+      "笔记本": [ "laptop", "notebook" ]
+      "性价比": [ "value", "budget", "affordable" ]
+      "入门": [ "entry-level", "starter", "budget" ]
+      "高端": [ "premium", "flagship", "high-end" ]

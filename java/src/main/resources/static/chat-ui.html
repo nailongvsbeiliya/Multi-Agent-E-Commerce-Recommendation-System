@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Recommendation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/chat-ui.css">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <div>
+            <p class="kicker">Multi-Agent E-commerce</p>
+            <h1>Chat Recommendation Window</h1>
+        </div>
+        <span id="statusBadge" class="status idle">Idle</span>
+    </header>
+
+    <main class="workspace">
+        <section class="chat-panel">
+            <div class="conversation-toolbar">
+                <button id="newChatButton" type="button">+ New Chat</button>
+                <select id="conversationSelect" title="conversation list"></select>
+            </div>
+
+            <div id="chatFeed" class="chat-feed">
+                <article class="bubble assistant">
+                    <p class="role">Assistant</p>
+                    <p class="text">Tell me what you want to buy. I will run profile, retrieval, rerank and inventory decisions for you.</p>
+                </article>
+            </div>
+
+            <form id="chatForm" class="composer">
+                <input id="queryInput" type="text" placeholder="Example: I need noise-cancelling headphones under 2000, recommend 3 options" required>
+                <div class="controls">
+                    <input id="userIdInput" type="text" value="u001" title="user id">
+                    <input id="numItemsInput" type="number" min="1" max="10" value="5" title="num items">
+                    <button id="sendButton" type="submit">Send</button>
+                </div>
+            </form>
+
+            <section class="guess-panel">
+                <div class="guess-head">
+                    <h2>猜你喜欢</h2>
+                    <span id="guessStrategy" class="guess-strategy">profile+catalog</span>
+                </div>
+                <div id="guessList" class="guess-list empty">正在加载猜你喜欢...</div>
+            </section>
+        </section>
+
+        <aside class="side-panel">
+            <section class="card">
+                <h2>Request Info</h2>
+                <div class="kv"><span>requestId</span><strong id="requestId">-</strong></div>
+                <div class="kv"><span>userId</span><strong id="responseUserId">-</strong></div>
+                <div class="kv"><span>experiment</span><strong id="experimentGroup">-</strong></div>
+                <div class="kv"><span>latency</span><strong id="latency">-</strong></div>
+            </section>
+
+            <section class="card">
+                <h2>Products</h2>
+                <div id="products" class="stack empty">No recommendation yet.</div>
+            </section>
+
+            <section class="card">
+                <h2>Marketing Copies</h2>
+                <div id="copies" class="stack empty">No copy generated yet.</div>
+            </section>
+
+            <section class="card">
+                <h2>Agent Output</h2>
+                <pre id="agentJson" class="json">Waiting for request...</pre>
+            </section>
+        </aside>
+    </main>
+</div>
+
+<script src="/chat-multi-session.js"></script>
+</body>
+</html>

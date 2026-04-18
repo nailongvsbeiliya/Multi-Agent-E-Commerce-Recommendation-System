@@ -1,0 +1,15 @@
+spring:
+  config:
+    activate:
+      on-profile: ide
+  profiles:
+    include: llm
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: root
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update

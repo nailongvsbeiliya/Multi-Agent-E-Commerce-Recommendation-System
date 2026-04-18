@@ -16,6 +16,7 @@ import java.util.Map;
 public class RecommendationResponse {
     private String requestId;
     private String userId;
+    private String sessionId;
     private List<Product> products;
     private List<Map<String, String>> marketingCopies;
     private String experimentGroup;
@@ -23,6 +24,7 @@ public class RecommendationResponse {
     private Map<String, Integer> purchaseLimits;
     private List<Map<String, Object>> lowStockAlerts;
     private Map<String, AgentResult> agentResults;
+    private Map<String, Object> sessionMemory;
     private double totalLatencyMs;
     @Builder.Default
     private Instant timestamp = Instant.now();

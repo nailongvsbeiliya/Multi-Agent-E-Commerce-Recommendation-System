@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Style UI Pro</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+    <div class="logo">Style Rec UI Pro</div>
+    <div class="top-meta">
+        用户 ID: <span id="currentUserId">u001</span>
+    </div>
+</header>
+
+<main>
+    <section class="hero-section">
+        <h1>你想买什么</h1>
+        <p>输入预算、品类或使用场景，我会给你更贴合的推荐。</p>
+
+        <div class="search-box">
+            <input id="queryInput" type="text" placeholder="例如：推荐 3000 左右的手机">
+            <button id="searchButton" type="button">智能推荐</button>
+        </div>
+    </section>
+
+    <section class="container">
+        <h2 class="section-title" id="resultTitle">猜你喜欢</h2>
+        <div id="loading" class="loading-indicator">正在加载推荐...</div>
+        <div class="product-grid" id="productGrid"></div>
+        <div class="more-wrap">
+            <div class="result-actions">
+                <span id="resultCount" class="result-count"></span>
+                <button id="moreButton" class="more-btn" type="button">查看更多</button>
+            </div>
+        </div>
+    </section>
+</main>
+
+<script>
+    let sessionId = null;
+    let currentProducts = [];
+    let currentCopyMap = {};
+    let visibleCount = 3;
+    const MAX_VISIBLE = 6;
+
+    const userId = "u_" + Math.random().toString(36).slice(2, 8);
+    document.getElementById("currentUserId").textContent = userId;
+
+    const queryInput = document.getElementById("queryInput");
+    const searchButton = document.getElementById("searchButton");
+    const moreButton = document.getElementById("moreButton");
+    const loading = document.getElementById("loading");
+    const resultTitle = document.getElementById("resultTitle");
+    const productGrid = document.getElementById("productGrid");
+    const resultCount = document.getElementById("resultCount");
+
+    function showLoading(flag) {
+        loading.style.display = flag ? "block" : "none";
+        productGrid.style.opacity = flag ? "0.45" : "1";
+        if (flag && currentProducts.length > 0) {
+            moreButton.disabled = true;
+            moreButton.textContent = "加载中...";
+        }
+    }
+
+    function refreshMoreAction() {
+        const total = Math.min(currentProducts.length, MAX_VISIBLE);
+        const shown = Math.min(visibleCount, total);
+        resultCount.textContent = total > 0 ? `已展示 ${shown} / ${total}` : "";
+
+        const canExpand = currentProducts.length > 3 && visibleCount < MAX_VISIBLE;
+        if (canExpand) {
+            moreButton.disabled = false;
+            moreButton.textContent = "查看更多";
+            moreButton.style.display = "inline-block";
+            return;
+        }
+
+        if (total > 3) {
+            moreButton.disabled = true;
+            moreButton.textContent = "已展示全部";
+            moreButton.style.display = "inline-block";
+            return;
+        }
+
+        moreButton.disabled = false;
+        moreButton.textContent = "查看更多";
+        moreButton.style.display = "none";
+    }
+
+    function unique(values) {
+        return Array.from(new Set(values.filter(Boolean)));
+    }
+
+    function buildReasonTags(product, index) {
+        const tags = [];
+        const sourceTags = Array.isArray(product.tags) ? product.tags : [];
+
+        if (index === 0) {
+            tags.push("综合优先");
+        }
+        if (sourceTags.some((t) => String(t).includes("性价比"))) {
+            tags.push("高性价比");
+        }
+        if (sourceTags.some((t) => String(t).includes("新品"))) {
+            tags.push("新品");
+        }
+        if (product.salesHeat >= 0.75) {
+            tags.push("热度高");
+        }
+        if (product.stock >= 200) {
+            tags.push("库存充足");
+        }
+        if (typeof product.price === "number") {
+            if (product.price <= 1500) {
+                tags.push("入门价位");
+            } else if (product.price <= 4000) {
+                tags.push("主流价位");
+            } else {
+                tags.push("高端体验");
+            }
+        }
+        if (!tags.length) {
+            tags.push("为你匹配");
+        }
+        return unique(tags).slice(0, 3);
+    }
+
+    function renderCards(products, copyMap, resetVisible = false) {
+        currentProducts = Array.isArray(products) ? products : [];
+        currentCopyMap = copyMap || {};
+        if (resetVisible) {
+            visibleCount = 3;
+        }
+
+        productGrid.innerHTML = "";
+        if (!currentProducts.length) {
+            productGrid.innerHTML = "<p class='feedback-message'>暂无匹配商品</p>";
+            refreshMoreAction();
+            return;
+        }
+
+        const displayProducts = currentProducts.slice(0, Math.min(visibleCount, MAX_VISIBLE));
+        displayProducts.forEach((product, index) => {
+            const copy = currentCopyMap[product.productId] || "精选好物，值得一试。";
+            const brand = product.brand || "精选品牌";
+            const title = product.name || product.productId || "推荐商品";
+            const price = typeof product.price === "number" ? product.price.toFixed(0) : "-";
+            const reasonTags = buildReasonTags(product, index);
+            const reasonTagsHtml = reasonTags.map((tag, i) => `
+                <span class="reason-tag ${i === 0 ? "accent" : ""}">${tag}</span>
+            `).join("");
+
+            const card = document.createElement("div");
+            card.className = "product-card";
+            card.innerHTML = `
+                <div class="product-image-placeholder">[商品图片]</div>
+                <div class="product-info">
+                    <div class="product-brand">${brand}</div>
+                    <div class="reason-tags">${reasonTagsHtml}</div>
+                    <div class="product-title">${title}</div>
+                    <div class="product-price">CNY ${price}</div>
+                    <div class="product-copy">${copy}</div>
+                </div>
+            `;
+            productGrid.appendChild(card);
+        });
+
+        refreshMoreAction();
+    }
+
+    async function loadGuessYouLike() {
+        resultTitle.textContent = "猜你喜欢";
+        showLoading(true);
+        try {
+            const res = await fetch(`/api/v1/recommend/guess-you-like?userId=${encodeURIComponent(userId)}&numItems=8`);
+            if (!res.ok) {
+                throw new Error("load guess-you-like failed");
+            }
+            const data = await res.json();
+            renderCards(data.items || [], null, true);
+        } catch (error) {
+            productGrid.innerHTML = "<p class='feedback-message error'>加载失败，请检查服务是否启动</p>";
+            refreshMoreAction();
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function searchRecommend() {
+        const query = queryInput.value.trim();
+        if (!query) {
+            return;
+        }
+
+        resultTitle.textContent = "推荐结果";
+        showLoading(true);
+        try {
+            const payload = {
+                userId,
+                query,
+                numItems: 8
+            };
+            if (sessionId) {
+                payload.sessionId = sessionId;
+            }
+
+            const res = await fetch("/api/v1/recommend/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+                throw new Error("recommend request failed");
+            }
+
+            const data = await res.json();
+            if (data.sessionId) {
+                sessionId = data.sessionId;
+            }
+
+            const copyMap = {};
+            (data.marketingCopies || []).forEach((item) => {
+                if (item && item.product_id) {
+                    copyMap[item.product_id] = item.copy || "";
+                }
+            });
+            renderCards(data.products || [], copyMap, true);
+        } catch (error) {
+            productGrid.innerHTML = "<p class='feedback-message error'>请求失败，请稍后再试</p>";
+            refreshMoreAction();
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    moreButton.addEventListener("click", () => {
+        visibleCount = MAX_VISIBLE;
+        renderCards(currentProducts, currentCopyMap, false);
+    });
+
+    searchButton.addEventListener("click", searchRecommend);
+    queryInput.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+            searchRecommend();
+        }
+    });
+
+    loadGuessYouLike();
+</script>
+</body>
+</html>

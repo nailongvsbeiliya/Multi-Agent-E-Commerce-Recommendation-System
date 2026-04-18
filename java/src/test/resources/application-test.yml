@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ecommerce-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+recommendation:
+  nlp:
+    llm-first: false
+    stop-words: [ "推荐", "给我", "我要", "想要", "的", "了" ]
+    synonym-dictionary:
+      "苹果": [ "apple", "iphone", "airpods", "ipad" ]
+      "手机": [ "phone", "iphone", "huawei", "mate" ]

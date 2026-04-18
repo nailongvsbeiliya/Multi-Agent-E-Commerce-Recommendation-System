@@ -133,22 +133,27 @@ public class SupervisorOrchestrator {
     private CompletableFuture<Map<String, Object>> phase1ParallelNode(RecommendationGraphState state) {
         RecommendationRequest request = state.request();
         ExperimentAssignment experiment = state.experiment();
+        Map<String, Object> requestContext = request.getContext() != null ? request.getContext() : Map.of();
 
         CompletableFuture<AgentResult> profileFuture = userProfileAgent.runAsync(
                 Map.of(
                         "userId", request.getUserId(),
-                        "context", request.getContext() != null ? request.getContext() : Map.of("scene", request.getScene())
+                        "context", requestContext.isEmpty() ? Map.of("scene", request.getScene()) : requestContext
                 ));
-        CompletableFuture<AgentResult> recFuture = productRecAgent.runAsync(
-                Map.of(
-                        "mode", "recall",
-                        "numItems", request.getNumItems() * 2,
-                        "strategy", experiment != null ? experiment.getStrategy() : "rule_based",
-                        "userQuery", request.getUserQuery(),
-                        "queryTokens", request.getContext() != null
-                                ? request.getContext().getOrDefault("query_tokens", List.of())
-                                : List.of()
-                ));
+
+        Map<String, Object> recallParams = new java.util.HashMap<>();
+        recallParams.put("mode", "recall");
+        recallParams.put("numItems", request.getNumItems() * 2);
+        recallParams.put("strategy", experiment != null ? experiment.getStrategy() : "rule_based");
+        recallParams.put("userQuery", request.getUserQuery());
+        recallParams.put("queryTokens", requestContext.getOrDefault("query_tokens", List.of()));
+        recallParams.put("negativeQueryTokens", requestContext.getOrDefault("negative_query_tokens", List.of()));
+        recallParams.put("hardCategoryIntents", requestContext.getOrDefault("hard_category_intents", List.of()));
+        recallParams.put("excludeProductIds", requestContext.getOrDefault("exclude_product_ids", List.of()));
+        if (requestContext.get("memory_price_max") != null) {
+            recallParams.put("memoryPriceMax", requestContext.get("memory_price_max"));
+        }
+        CompletableFuture<AgentResult> recFuture = productRecAgent.runAsync(recallParams);
 
         AgentResult profileResult = profileFuture.join();
         AgentResult recResult = recFuture.join();
@@ -173,19 +178,23 @@ public class SupervisorOrchestrator {
         ExperimentAssignment experiment = state.experiment();
         UserProfile profile = state.userProfile() != null ? state.userProfile() : new UserProfile();
         List<Product> recalledProducts = state.recalledProducts();
+        Map<String, Object> requestContext = request.getContext() != null ? request.getContext() : Map.of();
 
-        CompletableFuture<AgentResult> rerankFuture = productRecAgent.runAsync(
-                Map.of(
-                        "mode", "rerank",
-                        "userProfile", profile,
-                        "numItems", request.getNumItems(),
-                        "strategy", experiment != null ? experiment.getStrategy() : "rule_based",
-                        "candidates", recalledProducts,
-                        "userQuery", request.getUserQuery(),
-                        "queryTokens", request.getContext() != null
-                                ? request.getContext().getOrDefault("query_tokens", List.of())
-                                : List.of()
-                ));
+        Map<String, Object> rerankParams = new java.util.HashMap<>();
+        rerankParams.put("mode", "rerank");
+        rerankParams.put("userProfile", profile);
+        rerankParams.put("numItems", request.getNumItems());
+        rerankParams.put("strategy", experiment != null ? experiment.getStrategy() : "rule_based");
+        rerankParams.put("candidates", recalledProducts);
+        rerankParams.put("userQuery", request.getUserQuery());
+        rerankParams.put("queryTokens", requestContext.getOrDefault("query_tokens", List.of()));
+        rerankParams.put("negativeQueryTokens", requestContext.getOrDefault("negative_query_tokens", List.of()));
+        rerankParams.put("hardCategoryIntents", requestContext.getOrDefault("hard_category_intents", List.of()));
+        rerankParams.put("excludeProductIds", requestContext.getOrDefault("exclude_product_ids", List.of()));
+        if (requestContext.get("memory_price_max") != null) {
+            rerankParams.put("memoryPriceMax", requestContext.get("memory_price_max"));
+        }
+        CompletableFuture<AgentResult> rerankFuture = productRecAgent.runAsync(rerankParams);
         CompletableFuture<AgentResult> inventoryFuture = inventoryAgent.runAsync(Map.of("products", recalledProducts));
 
         AgentResult rerankResult = rerankFuture.join();

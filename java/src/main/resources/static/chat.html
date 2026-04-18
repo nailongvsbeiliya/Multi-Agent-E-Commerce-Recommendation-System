@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Recommendation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/chat.css">
+</head>
+<body>
+<div class="app-shell">
+    <header class="topbar">
+        <div>
+            <p class="kicker">Multi-Agent E-commerce</p>
+            <h1>聊天式推荐窗口</h1>
+        </div>
+        <span id="statusBadge" class="status idle">空闲</span>
+    </header>
+
+    <main class="workspace">
+        <section class="chat-panel">
+            <div id="chatFeed" class="chat-feed">
+                <article class="bubble assistant">
+                    <p class="role">Assistant</p>
+                    <p class="text">告诉我你想买什么，我会结合用户画像、召回重排和库存决策给你推荐。</p>
+                </article>
+            </div>
+
+            <form id="chatForm" class="composer">
+                <input id="queryInput" type="text" placeholder="例如：我想买 2000 元以内的降噪耳机，推荐 3 个" required>
+                <div class="controls">
+                    <input id="userIdInput" type="text" value="u001" title="user id">
+                    <input id="numItemsInput" type="number" min="1" max="10" value="5" title="num items">
+                    <button id="sendButton" type="submit">发送</button>
+                </div>
+            </form>
+        </section>
+
+        <aside class="side-panel">
+            <section class="card">
+                <h2>请求信息</h2>
+                <div class="kv"><span>requestId</span><strong id="requestId">-</strong></div>
+                <div class="kv"><span>userId</span><strong id="responseUserId">-</strong></div>
+                <div class="kv"><span>experiment</span><strong id="experimentGroup">-</strong></div>
+                <div class="kv"><span>latency</span><strong id="latency">-</strong></div>
+            </section>
+
+            <section class="card">
+                <h2>推荐商品</h2>
+                <div id="products" class="stack empty">暂无推荐</div>
+            </section>
+
+            <section class="card">
+                <h2>营销文案</h2>
+                <div id="copies" class="stack empty">暂无文案</div>
+            </section>
+
+            <section class="card">
+                <h2>Agent 输出</h2>
+                <pre id="agentJson" class="json">等待请求...</pre>
+            </section>
+        </aside>
+    </main>
+</div>
+
+<script src="/chat.js"></script>
+</body>
+</html>

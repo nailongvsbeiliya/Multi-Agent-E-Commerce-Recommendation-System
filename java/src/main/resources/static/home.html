@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent 推荐看板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="page-shell">
+    <header class="hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Java Supervisor Demo</p>
+            <h1>多 Agent 电商推荐可视化</h1>
+            <p class="hero-text">
+                一键发起推荐请求，查看用户画像、召回重排、库存过滤、营销文案和实验分组的完整结果。
+            </p>
+        </div>
+        <div class="hero-stat-grid">
+            <article class="stat-card accent-orange">
+                <span>编排模式</span>
+                <strong>Supervisor</strong>
+            </article>
+            <article class="stat-card accent-blue">
+                <span>并行阶段</span>
+                <strong>Phase 1 + 2</strong>
+            </article>
+            <article class="stat-card accent-green">
+                <span>实验引擎</span>
+                <strong>Thompson</strong>
+            </article>
+        </div>
+    </header>
+
+    <main class="dashboard">
+        <section class="panel control-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Request</p>
+                    <h2>发起推荐</h2>
+                </div>
+                <span id="statusBadge" class="status-badge idle">待发起</span>
+            </div>
+
+            <form id="recommendForm" class="request-form">
+                <label>
+                    <span>用户 ID</span>
+                    <input id="userId" name="userId" type="text" value="u001" required>
+                </label>
+                <label>
+                    <span>场景</span>
+                    <select id="scene" name="scene">
+                        <option value="homepage">首页</option>
+                        <option value="detail">详情页</option>
+                        <option value="campaign">活动页</option>
+                    </select>
+                </label>
+                <label>
+                    <span>推荐数量</span>
+                    <input id="numItems" name="numItems" type="number" min="1" max="10" value="3" required>
+                </label>
+                <button type="submit" class="primary-btn">生成推荐结果</button>
+            </form>
+        </section>
+
+        <section class="panel summary-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Overview</p>
+                    <h2>结果总览</h2>
+                </div>
+            </div>
+
+            <div class="summary-grid">
+                <article class="summary-card">
+                    <span>实验分组</span>
+                    <strong id="experimentGroup">-</strong>
+                    <small id="experimentStrategy">等待请求</small>
+                </article>
+                <article class="summary-card">
+                    <span>总耗时</span>
+                    <strong id="latency">-</strong>
+                    <small>毫秒</small>
+                </article>
+                <article class="summary-card">
+                    <span>商品数量</span>
+                    <strong id="productCount">0</strong>
+                    <small>TopN</small>
+                </article>
+            </div>
+
+            <div class="response-echo">
+                <div>
+                    <span>Request ID</span>
+                    <strong id="requestId">-</strong>
+                </div>
+                <div>
+                    <span>请求用户</span>
+                    <strong id="responseUserId">-</strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel products-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Products</p>
+                    <h2>推荐商品</h2>
+                </div>
+            </div>
+            <div id="productsGrid" class="products-grid empty-state">还没有推荐结果</div>
+        </section>
+
+        <section class="panel marketing-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Copy</p>
+                    <h2>营销文案</h2>
+                </div>
+            </div>
+            <div id="copyList" class="copy-list empty-state">文案结果会显示在这里</div>
+        </section>
+
+        <section class="panel agents-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Agents</p>
+                    <h2>Agent 执行状态</h2>
+                </div>
+            </div>
+            <div id="agentGrid" class="agent-grid empty-state">Agent 状态尚未产生</div>
+        </section>
+
+        <section class="panel diagnostics-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Diagnostics</p>
+                    <h2>库存与实验信息</h2>
+                </div>
+            </div>
+            <div class="diagnostics-grid">
+                <article>
+                    <h3>限购策略</h3>
+                    <pre id="purchaseLimits" class="json-box">等待请求</pre>
+                </article>
+                <article>
+                    <h3>低库存预警</h3>
+                    <pre id="stockAlerts" class="json-box">等待请求</pre>
+                </article>
+                <article>
+                    <h3>实验详情/错误信息</h3>
+                    <pre id="experimentInfo" class="json-box">等待请求</pre>
+                </article>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="/dashboard.js"></script>
+</body>
+</html>

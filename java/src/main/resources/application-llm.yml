@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: llm
+  ai:
+    openai:
+      api-key: sk-4028fefa161a418c8b86aa871d664873
+      base-url: ${ECOM_LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      chat:
+        options:
+          model: ${ECOM_LLM_MODEL:qwen-plus}
+          temperature: ${ECOM_LLM_TEMPERATURE:0.3}
