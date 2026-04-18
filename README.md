@@ -1,280 +1,213 @@
 ﻿# Multi-Agent E-Commerce Recommendation System
 
-> A runnable multi-agent demo for e-commerce recommendation, inventory decisioning, marketing copy generation, and online experimentation.
+> LangGraph4j + Spring Boot 的多 Agent 电商推荐系统（支持会话记忆、猜你想买、A/B 实验、营销文案、前端可视化）。
 
 [![Java](https://img.shields.io/badge/Java-17%2B-orange?logo=openjdk)](./java)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.0-6DB33F?logo=springboot)](./java/pom.xml)
+[![LangGraph4j](https://img.shields.io/badge/LangGraph4j-1.8.12-blue)](./java/pom.xml)
 
+## 项目说明
 
-## What This Project Is
+> 当前版本已完整实现多 Agent 协同框架，包括用户画像、推荐召回/重排、库存决策、营销文案和实验编排。为保证本地可运行，部分 Agent 的内部能力采用规则逻辑、内置数据和 fallback 机制进行简化，但各 Agent 的职责边界、状态传递和编排流程均已真实落地。
 
-This repository demonstrates how to build a **LangGraph4j-powered Supervisor Multi-Agent system** for an e-commerce recommendation scenario.
+这个项目不是“单体推荐函数”，而是一个可运行的 Supervisor 架构：
 
-Instead of putting all business logic into one service, the project splits recommendation into several specialist agents:
+- `SupervisorOrchestrator`（LangGraph4j）负责流程编排
+- `UserProfileAgent` 负责用户画像
+- `ProductRecAgent` 负责召回 + 重排（含 LLM 可选路径）
+- `InventoryAgent` 负责库存过滤和限购策略
+- `MarketingCopyAgent` 负责生成营销文案
+- `ABTestService` 负责实验分桶与策略路由
 
-- `UserProfileAgent`: builds a structured user profile from behavior features
-- `ProductRecAgent`: performs candidate recall and optional LLM reranking
-- `InventoryAgent`: filters unavailable items and produces stock-related constraints
-- `MarketingCopyAgent`: generates personalized copy for recommended products
-- `SupervisorOrchestrator`: coordinates all agents through a `langgraph4j` state graph and aggregates their outputs
+## 功能总览（表格版）
 
-Current version statement:
-The current version already implements the full multi-agent collaboration framework, including user profiling, recommendation recall/rerank, inventory decisioning, marketing copy generation, and experiment orchestration. To keep the project runnable in a local environment, some internal agent capabilities are simplified with rule-based logic, built-in data, and fallback mechanisms, but the agent boundaries, state handoff, and orchestration flow are all concretely implemented in code.
+| 模块 | 当前实现 | 说明 |
+|---|---|---|
+| 用户画像 Agent | 已实现 | `UserFeatureStoreService` + 画像聚合，输出偏好类目、价格区间等 |
+| 召回 Agent | 已实现 | 从 `product_catalog` 召回候选商品，支持策略参数 |
+| 重排 Agent | 已实现 | 先规则/特征打分，再尝试 LLM 重排，失败自动 fallback |
+| 库存 Agent | 已实现 | 读取 `inventory`，过滤缺货并输出限购与低库存提醒 |
+| 文案 Agent | 已实现 | 按商品生成营销文案，支持 LLM 失败降级 |
+| A/B 实验 | 已实现 | `control / treatment_llm / explore` 分桶与策略快照 |
+| 会话记忆 | 已实现 | `sessionId` 驱动，支持“再来便宜点/换一批”这类差分推荐 |
+| 猜你想买 | 已实现 | 入口与每轮对话后调用 `/recommend/guess-you-like` |
+| 前端多会话 | 已实现 | 新建会话、会话切换、刷新后历史恢复（浏览器 `localStorage`） |
 
-## Core Highlights
-
-- Multi-agent architecture using `langgraph4j` + `Supervisor` orchestration pattern
-- Parallel execution for user profiling, recall, rerank, and inventory validation
-- Agent-level short-term and long-term memory modeling
-- Thompson Sampling based A/B experimentation skeleton
-- Inventory-aware recommendation aggregation
-- LLM-ready reranking and marketing generation with graceful fallback
-- Spring Boot backend plus a lightweight visualization dashboard
-
-## Agent-Centric Design
-
-### Supervisor + Specialist Agents
-
-The system follows a `Supervisor` pattern implemented with `langgraph4j StateGraph`, instead of handoff-style agent chaining.
-The orchestrator keeps control over task routing, phase boundaries, intermediate state, and final aggregation.
-
-This makes the pipeline easier to:
-
-- observe
-- test
-- extend
-- run in parallel
-- experiment on at the agent level
-
-### Memory Design
-
-The project already reflects a useful agent-memory split:
-
-- **Working memory**:
-  request context, recalled candidates, reranked results, stock decisions, and final aggregation state maintained by the Supervisor during one request
-- **Long-term memory**:
-  user behavior features, RFM scores, preferred categories, price range, and user segments represented by `UserProfile`
-
-This allows downstream agents to consume the outputs of upstream agents rather than acting in isolation.
-
-### Collaboration Flow
-
-- `UserProfileAgent` produces structured preferences and user segments
-- `ProductRecAgent` uses that context to drive recall and rerank
-- `InventoryAgent` constrains recommendation results with stock signals
-- `MarketingCopyAgent` uses user segment + product set to generate final personalized output
-
-## Architecture
+## 架构流程
 
 ```mermaid
 flowchart TD
-    A["POST /api/v1/recommend"] --> B["RecommendationController"]
-    B --> C["SupervisorOrchestrator (langgraph4j StateGraph)"]
-
-    C --> D["ABTestService.assign(userId)"]
-
-    C --> E["Phase 1 Parallel"]
+    A["POST /api/v1/recommend 或 /api/v1/recommend/chat"] --> B["RecommendationController"]
+    B --> C["SupervisorOrchestrator (LangGraph4j StateGraph)"]
+    C --> D["assign_experiment"]
+    D --> E["phase1_parallel"]
     E --> F["UserProfileAgent"]
     E --> G["ProductRecAgent (recall)"]
-
-    F --> F1["UserFeatureStoreService"]
-    F1 --> F2["RFM + Segmentation + UserProfile"]
-
-    G --> G1["ProductCatalogService"]
-    G1 --> G2["Candidate Products"]
-
-    C --> H["Phase 2 Parallel"]
+    E --> H["phase2_parallel"]
     H --> I["ProductRecAgent (rerank)"]
     H --> J["InventoryAgent"]
-
-    I --> I1["LLM rerank or fallback ordering"]
-    J --> J1["InventoryService / JPA / PostgreSQL"]
-    J --> J2["available_products + purchase_limits + stock_alerts"]
-
-    C --> K["RecommendationAggregator"]
-    K --> L["Final TopN Products"]
-
-    C --> M["MarketingCopyAgent"]
-    M --> M1["Template selection"]
-    M --> M2["LLM generation or fallback copy"]
-    M --> M3["Compliance filtering"]
-
-    C --> N["RecommendationResponse"]
+    H --> K["aggregate"]
+    K --> L["marketing_copy"]
+    L --> M["finalize -> RecommendationResponse"]
 ```
 
-## Repository Layout
+StateGraph 节点定义位于：`java/src/main/java/com/ecommerce/orchestrator/SupervisorOrchestrator.java`。
+
+## 目录结构
 
 ```text
 multi-agent-ecommerce-system/
-├── java/                         # Main Spring Boot implementation
-│   ├── src/main/java/com/ecommerce/
-│   │   ├── agent/               # Specialist agents
-│   │   ├── config/              # Spring config and bootstrap
-│   │   ├── entity/              # JPA entities
-│   │   ├── model/               # Request/response/domain models
-│   │   ├── orchestrator/        # LangGraph4j-based Supervisor orchestration
-│   │   ├── repository/          # Repositories
-│   │   └── service/             # Feature store, inventory, aggregation, A/B test
-│   └── src/main/resources/static/
-│       ├── index.html           # Visualization dashboard
-│       ├── styles.css
-│       └── app.js
-├── python/                       # Python version
-├── go/                           # Go version
-└── docs/                         # Architecture notes and supporting docs
+├── java/
+│   ├── db/
+│   │   └── init_schema_and_demo.sql
+│   ├── init-db.ps1 / init-db.bat
+│   ├── start.ps1
+│   ├── pom.xml
+│   └── src/main/
+│       ├── java/com/ecommerce/
+│       │   ├── agent/
+│       │   ├── orchestrator/
+│       │   ├── service/
+│       │   ├── repository/
+│       │   ├── entity/
+│       │   └── config/
+│       └── resources/
+│           ├── application.yml
+│           ├── application-ide.yml
+│           ├── application-llm.yml
+│           └── static/
+└── README.md
 ```
 
+## 接口清单
 
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/v1/recommend` | 结构化推荐请求 |
+| `POST` | `/api/v1/recommend/chat` | 自然语言推荐（支持 `sessionId`、会话记忆） |
+| `GET` | `/api/v1/recommend/guess-you-like` | 猜你想买 |
+| `GET` | `/api/v1/llm/status` | LLM 配置检查 |
+| `GET` | `/api/v1/llm/smoke` | LLM 连通性冒烟测试 |
+| `GET` | `/api/v1/experiments` | 实验快照 |
+| `POST` | `/api/v1/experiments/track` | 实验结果回传 |
+| `GET` | `/api/v1/health` | 健康检查 |
 
-
-## API Example
-
-### Request
+### 示例：聊天推荐
 
 ```http
-POST /api/v1/recommend
+POST /api/v1/recommend/chat
 Content-Type: application/json
 ```
 
 ```json
 {
   "userId": "u001",
-  "scene": "homepage",
-  "numItems": 3,
-  "context": {
-    "scene": "homepage"
-  }
+  "sessionId": "sess-u001-xxxx",
+  "query": "预算 3000，推荐性价比手机，不要苹果",
+  "numItems": 5
 }
 ```
 
-### Response Shape
+返回中会包含：
 
-```json
-{
-  "requestId": "xxx",
-  "userId": "u001",
-  "products": [],
-  "marketingCopies": [],
-  "experimentGroup": "control",
-  "experimentInfo": {},
-  "purchaseLimits": {},
-  "lowStockAlerts": [],
-  "agentResults": {},
-  "totalLatencyMs": 123.4,
-  "timestamp": "2026-04-12T12:30:01Z"
-}
-```
+- `sessionId`
+- `products`
+- `marketingCopies`
+- `agentResults`
+- `sessionMemory`（本轮应用的记忆提示）
 
-## Testing
+## 快速开始（Windows）
 
-Run the Java integration test:
+### 1) 环境准备
+
+| 组件 | 建议版本 |
+|---|---|
+| JDK | 17 或 21（运行期） |
+| Maven | 3.9+ |
+| PostgreSQL | 14+（已在 18 验证） |
+
+### 2) 初始化数据库（表 + 演示数据）
 
 ```powershell
 cd D:\xiangmu\multi-agent-ecommerce-system\java
-mvn -q -Dtest=RecommendationControllerIntegrationTest test
+.\init-db.ps1 -AdminUser postgres -AdminPassword root -AppDb postgres
 ```
 
-## PostgreSQL Setup
+脚本会自动：
 
-The application now uses PostgreSQL by default.
+1. 检查 `psql` 可用性
+2. 创建数据库（若不存在）
+3. 执行 `db/init_schema_and_demo.sql`
+4. 打印 `product_catalog / inventory / recommendation_event` 行数
 
-```powershell
-$env:DB_HOST="localhost"
-$env:DB_PORT="5432"
-$env:DB_NAME="ecommerce"
-$env:DB_USER="postgres"
-$env:DB_PASSWORD="postgres"
-```
+### 3) 启动后端
 
-Start the backend:
-
-```powershell
-cd D:\xiangmu\multi-agent-ecommerce-system\java
-mvn --% spring-boot:run -Dmaven.compiler.release= -Dmaven.compiler.source=17 -Dmaven.compiler.target=17
-```
-
-Or use the startup script (checks PostgreSQL connectivity and fixes Windows `java.home=D:` issue):
+方式 A：推荐（自动检查 Java 与 PostgreSQL）
 
 ```powershell
 cd D:\xiangmu\multi-agent-ecommerce-system\java
 .\start.ps1
 ```
 
-## IDE One-Click Run
-
-If you want to run directly from IDE without preparing PostgreSQL first, use profile `ide`:
-
-1. Open run configuration for `com.ecommerce.MultiAgentApplication`
-2. Set Active profiles: `ide`
-3. Click the green Run button
-
-This profile uses in-memory H2 (`MODE=PostgreSQL`) for local one-click startup.
-
-## LLM Integration Test
-
-The Java service now includes two LLM verification endpoints:
-
-- `GET /api/v1/llm/status`: show current model/base-url/api-key status
-- `GET /api/v1/llm/smoke`: send a real prompt to the configured LLM
-
-### 1. Set environment variables (PowerShell)
-
-```powershell
-$env:DASHSCOPE_API_KEY="sk-xxxxx"
-$env:ECOM_LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
-$env:ECOM_LLM_MODEL="qwen-plus"
-```
-
-If you use another OpenAI-compatible provider, only keep `api-key`/`base-url`/`model` aligned with that provider.
-
-### 2. Start with `llm` profile
+方式 B：Maven 启动
 
 ```powershell
 cd D:\xiangmu\multi-agent-ecommerce-system\java
-mvn --% spring-boot:run -Dspring-boot.run.profiles=llm -Dmaven.compiler.release= -Dmaven.compiler.source=17 -Dmaven.compiler.target=17
+mvn --% spring-boot:run -Dmaven.compiler.release=17 -Dmaven.compiler.source=17 -Dmaven.compiler.target=17
 ```
 
-### 3. Verify model connectivity
+## IDE 一键运行
+
+`Main class`: `com.ecommerce.MultiAgentApplication`  
+`Active profiles`: `ide`（已默认连接 PostgreSQL）
+
+如果“点运行后立即退出”，优先检查：
+
+1. 运行配置选的 JRE 是否有效（不要是 `D:/` 这种无效路径）
+2. `application.yml` 的数据库配置是否可连
+3. 8080 端口是否被占用
+
+## 前端页面入口
+
+| 地址 | 用途 |
+|---|---|
+| `http://localhost:8080/chat-ui.html` | 主聊天导购页（多会话 + 历史恢复 + 猜你想买） |
+| `http://localhost:8080/style-ui-pro.html` | 风格化商品卡片页（默认先展示 3 个，点击“查看更多”到 6 个） |
+| `http://localhost:8080/` | 默认转发到 `chat-ui.html` |
+
+## 接入千问（Qwen）
+
+项目使用 OpenAI 兼容协议接入。建议通过环境变量覆盖配置，不要把 Key 提交到仓库：
+
+```powershell
+$env:ECOM_LLM_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+$env:ECOM_LLM_MODEL="qwen-plus"
+$env:SPRING_AI_OPENAI_API_KEY="your-real-key"
+```
+
+然后以 `llm` profile 启动，调用：
 
 ```powershell
 Invoke-RestMethod "http://localhost:8080/api/v1/llm/status"
-Invoke-RestMethod "http://localhost:8080/api/v1/llm/smoke?prompt=Reply%20exactly%3A%20PONG"
+Invoke-RestMethod "http://localhost:8080/api/v1/llm/smoke?prompt=Reply%20PONG"
 ```
 
-### 4. Run recommendation request (with real LLM path)
+## 集成测试
 
 ```powershell
-$body = @{
-  userId = "u001"
-  scene = "homepage"
-  numItems = 3
-  context = @{ scene = "homepage" }
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod "http://localhost:8080/api/v1/recommend" `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body $body
+cd D:\xiangmu\multi-agent-ecommerce-system\java
+mvn -q -Dtest=RecommendationControllerIntegrationTest test
 ```
 
+## 开源说明
 
+建议在公开仓库前完成：
 
-## Notes for Open Source Users
+1. 清理 `application*.yml` 中硬编码密钥
+2. 补充 `LICENSE`（建议 MIT）
+3. 补充 `CONTRIBUTING.md` 与 Issue/PR 模板
+4. 发布一份可复现的 Demo 视频/GIF（聊天推荐 + 会话记忆 + 猜你想买）
 
-- This is not a full production recommendation platform
-- It is a well-structured demo intended for learning, experimentation, and portfolio use
-- If you want real LLM behavior, provide valid model credentials and endpoint config
-- If you want real online data dependencies, wire Redis/PostgreSQL to the existing service boundaries
+---
 
-## Acknowledgements
-
-This project is inspired by common production patterns in:
-
-- recommendation systems
-- multi-agent orchestration
-- experimentation platforms
-- inventory-aware ranking
-- LLM-assisted decision systems
-
-## Star History
-
-If this project helps you, feel free to star it and adapt it for your own learning or portfolio.
+如果你准备把它作为简历项目，这个版本已经具备“可运行、多 Agent 编排、可演示、可扩展”的核心价值。
